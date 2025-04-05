@@ -147,7 +147,7 @@
 
   var
     --Backend/Murphi/MurphiModular/GenVars
-      -- These are virtual networks
+      -- These are the listof successful virtual networks
       fwd: NET_Ordered;
       cnt_fwd: NET_Ordered_cnt;
       resp: NET_Ordered;
@@ -156,9 +156,18 @@
       cnt_req: NET_Ordered_cnt;
       ping: NET_Ordered; 
       cnt_ping: NET_Ordered_cnt; -- TOOD: Add a network for the ping
+    
+     -- These are the virtual networks for faulty virtual networks
+     -- message packets will fail if they choose this virtual network
+      fwd_failure: NET_Ordered;
+      cnt_fwd_failure: NET_Ordered_cnt;
+      resp_failure: NET_Ordered;
+      cnt_resp_failure: NET_Ordered_cnt;
+      req_failure: NET_Ordered;
+      cnt_req_failure: NET_Ordered_cnt;
+      ping_failure: NET_Ordered; 
+      cnt_ping_failure: NET_Ordered_cnt; 
 
-      -- TODO: Add unreliable networks for all the above
-      
       g_perm: PermMonitor;
       i_cacheL1C1: OBJ_cacheL1C1;
       i_directoryL1C1: OBJ_directoryL1C1;
