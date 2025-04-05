@@ -1,4 +1,8 @@
 
+-- TODO (SanyaSriv): Think about where to put timers 
+-- One timer for every message that is being processed
+-- We should have a queue of timers for the C1.
+
 --Backend/Murphi/MurphiModular/Constants/GenConst
   ---- System access constants
   const
@@ -11,7 +15,7 @@
     U_NET_MAX: 10;
   
   ---- SSP declaration constants
-    NrCachesL1C1: 3;
+    NrCachesL1C1: 3; -- I think we can just have 2 here
   
 --Backend/Murphi/MurphiModular/GenTypes
   type
@@ -42,7 +46,13 @@
         InvL1C1, 
         Put_AckL1C1, 
         Fwd_GetSL1C1, 
-        Fwd_GetML1C1
+        Fwd_GetML1C1,
+
+        -- TODO: add ping messages here
+        PING,
+        ACK_PING_SUCCESS,
+        ACK_PING_FAILURE,
+        PING_PROP
       };
       
       ------Backend/Murphi/MurphiModular/Types/Enums/SubEnums/GenArchEnums
@@ -59,6 +69,7 @@
         cacheL1C1_I_store,
         cacheL1C1_I_load,
         cacheL1C1_I
+        -- Not sure if we need more states. 
       };
       
       s_directoryL1C1: enum {
@@ -90,6 +101,10 @@
         dst: Machines;
         cl: ClValue;
         acksExpectedL1C1: 0..NrCachesL1C1;
+
+        -- If we need more stuff for the pings then we can create it here
+        -- specific for pings, the others do not need it
+        original_req: Machines;
       end;
       
     ----Backend/Murphi/MurphiModular/Types/GenNetwork
@@ -104,6 +119,8 @@
         cl: ClValue;
         acksReceivedL1C1: 0..NrCachesL1C1;
         acksExpectedL1C1: 0..NrCachesL1C1;
+        timerArray:-1..O_NET_MAX*2; -- if it is -1, the timer is not being used
+        -- TODO: we will have a timer array
       end;
       
       MACH_cacheL1C1: record
@@ -130,14 +147,18 @@
 
   var
     --Backend/Murphi/MurphiModular/GenVars
+      -- These are virtual networks
       fwd: NET_Ordered;
       cnt_fwd: NET_Ordered_cnt;
       resp: NET_Ordered;
       cnt_resp: NET_Ordered_cnt;
       req: NET_Ordered;
       cnt_req: NET_Ordered_cnt;
-    
-    
+      ping: NET_Ordered; 
+      cnt_ping: NET_Ordered_cnt; -- TOOD: Add a network for the ping
+
+      -- TODO: Add unreliable networks for all the above
+      
       g_perm: PermMonitor;
       i_cacheL1C1: OBJ_cacheL1C1;
       i_directoryL1C1: OBJ_directoryL1C1;
@@ -315,6 +336,8 @@
       endfor;
       cnt_req[dst] := cnt_req[dst] - 1;
     end;
+
+    -- TOOD: Add pop and push for pings
     
     procedure Multicast_fwd_v_cacheL1C1(var msg: Message; dst_vect: v_cacheL1C1; src: Machines;);
     begin
@@ -407,6 +430,8 @@
     
   
   ----Backend/Murphi/MurphiModular/Functions/GenMessageConstrFunc
+    -- TOOD: construct a ping message in here
+
     function RequestL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines) : Message;
     var Message: Message;
     begin
@@ -529,6 +554,8 @@
     endalias;
     end;
     
+    -- TODO: Add function for when the timer goes off
+
   ----Backend/Murphi/MurphiModular/StateMachines/GenMessageStateMachines
     function FSM_MSG_cacheL1C1(inmsg:Message; m:OBJSET_cacheL1C1) : boolean;
     var msg: Message;
@@ -540,7 +567,8 @@
       switch inmsg.mtype
         else return false;
       endswitch;
-      
+      -- TODO: Add case for pings
+
       case cacheL1C1_I_load:
       switch inmsg.mtype
         case GetS_AckL1C1:
@@ -997,7 +1025,8 @@
   ResetMachine_();
   end;
   
-
+-- TODO: everytime we take a tick, decrement the counter to represent that 1 cycle has passed
+-- TODO: Add fucntion for decrementing, and decrement everytime a procedure is called below. 
 --Backend/Murphi/MurphiModular/GenRules
   ----Backend/Murphi/MurphiModular/Rules/GenAccessRuleSet
     ruleset m:OBJSET_cacheL1C1 do
@@ -1008,6 +1037,7 @@
         cbe.State = cacheL1C1_I & network_ready() 
       ==>
         FSM_Access_cacheL1C1_I_store(adr, m);
+        -- TODO: Add decrementing tick
         
       endrule;
     
