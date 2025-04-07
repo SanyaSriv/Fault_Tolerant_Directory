@@ -951,10 +951,10 @@
           cbe.State := cacheL1C1_I;
           return true;
         
-        -- case GetS_AckL1C1:
+        case GetS_AckL1C1:
           -- drop this, because if we transitioned to this state, then it probably happened because of the ping
-        --   return true; -- this is synonymous to dropping the message and not processing it further
-        -- else return false;
+           return true; -- this is synonymous to dropping the message and not processing it further
+        else return false;
       endswitch;
       
       case cacheL1C1_S_evict:
