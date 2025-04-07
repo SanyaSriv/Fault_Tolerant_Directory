@@ -664,16 +664,51 @@
     end;
     
   
+  -- SanyaSriv: Adding a procedure here to start the timer
+  procedure StartTimer(msg: Message; msg_needed: Message; i: OBJSET_cacheL1C1);
+    -- try to find an empty spot in the timer array and init it
+    begin
+      for t:0..O_NET_MAX*3 do
+        if i_cacheL1C1[i].timerArray[t].timer_in_use = 0 then
+          -- instantiate the timer here
+          i_cacheL1C1[i].timerArray[t].time_elapsed := 0;
+          i_cacheL1C1[i].timerArray[t].msg := msg;
+          i_cacheL1C1[i].timerArray[t].msg_in_wait := msg_needed;
+          return;
+        endif;
+      endfor;
+  end;
 
+  -- SanyaSriv: Adding a procedure here to end the timer
+  procedure EndTimer(msg: Message; i: OBJSET_cacheL1C1);
+  begin
+      for t:0..O_NET_MAX*3 do
+        if i_cacheL1C1[i].timerArray[t].timer_in_use = 1 then
+          -- check if this timer was waiting for the message that just got in
+          if (i_cacheL1C1[i].timerArray[t].msg_in_wait.adr = msg.adr) & 
+              (i_cacheL1C1[i].timerArray[t].msg_in_wait.mtype = msg.mtype) &
+              (i_cacheL1C1[i].timerArray[t].msg_in_wait.src = msg.src) then
+                -- remove the timer
+                i_cacheL1C1[i].timerArray[t].timer_in_use := 0;
+                i_cacheL1C1[i].timerArray[t].time_elapsed := 0;
+                return;
+          endif;
+        endif;
+      endfor;
+  end;
 --Backend/Murphi/MurphiModular/GenStateMachines
 
   ----Backend/Murphi/MurphiModular/StateMachines/GenAccessStateMachines
     procedure FSM_Access_cacheL1C1_I_load(adr:Address; m:OBJSET_cacheL1C1);
     var msg: Message;
+    var msg_expected : Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
       msg := RequestL1C1(adr, GetSL1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
+      -- start the timer in here for this message
+      msg_expected := RespL1C1(adr,GetS_AckL1C1, directoryL1C1, m, 0, 0);
+      StartTimer(msg, msg_expected, m);
       cbe.State := cacheL1C1_I_load;
     endalias;
     end;
@@ -741,8 +776,7 @@
       cbe.State := cacheL1C1_S_store;
     endalias;
     end;
-    
-    -- TODO: Add function for when the timer goes off
+  
 
   ----Backend/Murphi/MurphiModular/StateMachines/GenMessageStateMachines
     function FSM_MSG_cacheL1C1(inmsg:Message; m:OBJSET_cacheL1C1; corruption:0..1) : boolean;
@@ -768,6 +802,7 @@
           Set_perm(load, adr, m);
           Clear_perm(adr, m); Set_perm(load, adr, m);
           cbe.State := cacheL1C1_S;
+          EndTimer(inmsg, m); -- end the timer here 
           return true;
 
         case ACK_PING_FAILURE:
@@ -916,7 +951,10 @@
           cbe.State := cacheL1C1_I;
           return true;
         
-        else return false;
+        -- case GetS_AckL1C1:
+          -- drop this, because if we transitioned to this state, then it probably happened because of the ping
+        --   return true; -- this is synonymous to dropping the message and not processing it further
+        -- else return false;
       endswitch;
       
       case cacheL1C1_S_evict:
@@ -1256,11 +1294,6 @@
     return false;
     end;
 
--- SanyaSriv: Adding a procedure here to start the timer
--- procedure StartTimer(msg: Message; m: Machines; src: Machines);
-  -- try to find an empty spot in the timer array and init it
--- end;
-
 -- SanyaSriv: Adding a procedure here to increment the tick counter of everything
 procedure Tick();
   var msg : Message;
@@ -1281,10 +1314,6 @@ procedure Tick();
       endfor;
     endfor;
   end;
-
--- SanyaSriv: Adding a procedure here to end the timer
--- procedure EndTimer();
--- end;
 
 --Backend/Murphi/MurphiModular/GenResetFunc
 
