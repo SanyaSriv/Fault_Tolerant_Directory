@@ -710,7 +710,7 @@
     -- TODO: Add function for when the timer goes off
 
   ----Backend/Murphi/MurphiModular/StateMachines/GenMessageStateMachines
-    function FSM_MSG_cacheL1C1(inmsg:Message; m:OBJSET_cacheL1C1) : boolean;
+    function FSM_MSG_cacheL1C1(inmsg:Message; m:OBJSET_cacheL1C1; corruption:0..1) : boolean;
     var msg: Message;
     begin
       alias adr: inmsg.adr do
@@ -789,16 +789,16 @@
       case cacheL1C1_M:
       switch inmsg.mtype
         case Fwd_GetML1C1:
-          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the corruption variable
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_I;
           return true;
         
         case Fwd_GetSL1C1:
-          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the corruption variable
           Send_resp(msg, m);
-          msg := RespL1C1(adr,WBL1C1,m,directoryL1C1,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,WBL1C1,m,directoryL1C1,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the corruption variable
           Send_resp(msg, m);
           Clear_perm(adr, m); Set_perm(load, adr, m);
           cbe.State := cacheL1C1_S;
@@ -810,16 +810,16 @@
       case cacheL1C1_M_evict:
       switch inmsg.mtype
         case Fwd_GetML1C1:
-          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the corruption variable
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_M_evict_x_I;
           return true;
         
         case Fwd_GetSL1C1:
-          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the corruption variable
           Send_resp(msg, m);
-          msg := RespL1C1(adr,WBL1C1,m,directoryL1C1,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,WBL1C1,m,directoryL1C1,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the corruption variable
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_S_evict;
@@ -846,7 +846,7 @@
       case cacheL1C1_S:
       switch inmsg.mtype
         case InvL1C1:
-          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the corruption variable
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_I;
@@ -858,7 +858,7 @@
       case cacheL1C1_S_evict:
       switch inmsg.mtype
         case InvL1C1:
-          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the corruption variable
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_S_evict_x_I;
@@ -905,7 +905,7 @@
           return true;
         
         case InvL1C1:
-          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the corruption variable
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_I_store;
@@ -945,7 +945,7 @@
     return false;
     end;
     
-    function FSM_MSG_directoryL1C1(inmsg:Message; m:OBJSET_directoryL1C1) : boolean;
+    function FSM_MSG_directoryL1C1(inmsg:Message; m:OBJSET_directoryL1C1; corruption:0..1) : boolean;
     var msg: Message;
     begin
       alias adr: inmsg.adr do
@@ -954,7 +954,7 @@
       case directoryL1C1_I:
       switch inmsg.mtype
         case GetML1C1:
-          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_resp(msg, m);
           cbe.ownerL1C1 := inmsg.src;
           Clear_perm(adr, m);
@@ -963,14 +963,14 @@
         
         case GetSL1C1:
           AddElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
-          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := directoryL1C1_S;
           return true;
         
         case PutML1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_fwd(msg, m);
           if !(cbe.ownerL1C1 = inmsg.src) then
             Clear_perm(adr, m);
@@ -985,7 +985,7 @@
           endif;
         
         case PutSL1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_fwd(msg, m);
           RemoveElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
           if (VectorCount_cacheL1C1(cbe.cacheL1C1) = 0) then
@@ -1005,7 +1005,7 @@
       case directoryL1C1_M:
       switch inmsg.mtype
         case GetML1C1:
-          msg := RequestL1C1(adr,Fwd_GetML1C1,inmsg.src,cbe.ownerL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RequestL1C1(adr,Fwd_GetML1C1,inmsg.src,cbe.ownerL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_fwd(msg, m);
           cbe.ownerL1C1 := inmsg.src;
           Clear_perm(adr, m);
@@ -1013,7 +1013,7 @@
           return true;
         
         case GetSL1C1:
-          msg := RequestL1C1(adr,Fwd_GetSL1C1,inmsg.src,cbe.ownerL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := RequestL1C1(adr,Fwd_GetSL1C1,inmsg.src,cbe.ownerL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_fwd(msg, m);
           AddElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
           AddElement_cacheL1C1(cbe.cacheL1C1, cbe.ownerL1C1);
@@ -1022,7 +1022,7 @@
           return true;
         
         case PutML1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_fwd(msg, m);
           if (cbe.ownerL1C1 = inmsg.src) then
             cbe.cl := inmsg.cl;
@@ -1037,7 +1037,7 @@
           endif;
         
         case PutSL1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_fwd(msg, m);
           if !(cbe.ownerL1C1 = inmsg.src) then
             Clear_perm(adr, m);
@@ -1252,16 +1252,17 @@
   ----Backend/Murphi/MurphiModular/Rules/GenNetworkRule
     ruleset dst:Machines do
         ruleset src: Machines do
+          ruleset corruption:0..1 do
             alias msg:fwd[dst][0] do
               rule "Receive fwd"
                 cnt_fwd[dst] > 0
               ==>
             if IsMember(dst, OBJSET_directoryL1C1) then
-              if FSM_MSG_directoryL1C1(msg, dst) then
+              if FSM_MSG_directoryL1C1(msg, dst, corruption) then
                   Pop_fwd(dst, src);
               endif;
             elsif IsMember(dst, OBJSET_cacheL1C1) then
-              if FSM_MSG_cacheL1C1(msg, dst) then
+              if FSM_MSG_cacheL1C1(msg, dst, corruption) then
                   Pop_fwd(dst, src);
               endif;
             else error "unknown machine";
@@ -1270,20 +1271,22 @@
               endrule;
             endalias;
         endruleset;
+      endruleset;
     endruleset;
     
     ruleset dst:Machines do
         ruleset src: Machines do
+          ruleset corruption:0..1 do
             alias msg:resp[dst][0] do
               rule "Receive resp"
                 cnt_resp[dst] > 0
               ==>
             if IsMember(dst, OBJSET_directoryL1C1) then
-              if FSM_MSG_directoryL1C1(msg, dst) then
+              if FSM_MSG_directoryL1C1(msg, dst, corruption) then
                   Pop_resp(dst, src);
               endif;
             elsif IsMember(dst, OBJSET_cacheL1C1) then
-              if FSM_MSG_cacheL1C1(msg, dst) then
+              if FSM_MSG_cacheL1C1(msg, dst, corruption) then
                   Pop_resp(dst, src);
               endif;
             else error "unknown machine";
@@ -1292,20 +1295,22 @@
               endrule;
             endalias;
         endruleset;
+      endruleset;
     endruleset;
     
     ruleset dst:Machines do
         ruleset src: Machines do
+          ruleset corruption: 0..1 do
             alias msg:req[dst][0] do
               rule "Receive req"
                 cnt_req[dst] > 0
               ==>
             if IsMember(dst, OBJSET_directoryL1C1) then
-              if FSM_MSG_directoryL1C1(msg, dst) then
+              if FSM_MSG_directoryL1C1(msg, dst, corruption) then
                   Pop_req(dst, src);
               endif;
             elsif IsMember(dst, OBJSET_cacheL1C1) then
-              if FSM_MSG_cacheL1C1(msg, dst) then
+              if FSM_MSG_cacheL1C1(msg, dst, corruption) then
                   Pop_req(dst, src);
               endif;
             else error "unknown machine";
@@ -1314,6 +1319,7 @@
               endrule;
             endalias;
         endruleset;
+      endruleset;
     endruleset;
     
 
