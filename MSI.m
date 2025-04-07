@@ -2,6 +2,8 @@
 -- TODO (SanyaSriv): Think about where to put timers 
 -- One timer for every message that is being processed
 -- We should have a queue of timers for the C1.
+-- SanyaSriv: general note: I am not generating a special timer for pings, then we can resend it the next time
+-- the timeout happens. We should not be failing forever
 
 --Backend/Murphi/MurphiModular/Constants/GenConst
   ---- System access constants
@@ -109,9 +111,10 @@
         -- For exmaple, the abstracted ping name will be PING, but the actual message type can be GetS or GetM underneath it
       end;
     
-    -- SanyaSriv: Mking a timer status in here:
+    -- SanyaSriv: Making a timer status in here:
     Timer: record
-      msg: Message;
+      msg: Message; -- the sending of this message started this timer
+      msg_in_wait: Message; -- if the node recieves this message, then the timer will end
       timer_in_use: 0..1; -- 0 means that this timer is not in use
       time_elapsed: 0..10; -- After 10 cycles, we will trigger an event
     end;
@@ -200,7 +203,7 @@
           i_cacheL1C1[i].timerArray[t].timer_in_use := 0;
           i_cacheL1C1[i].timerArray[t].time_elapsed := 0;
         endfor;
-        
+
       endfor;
     end;
     
@@ -583,14 +586,18 @@
     -- if the 1 bit value is set, then consider it failed
     -- otherwise, we can continue to process it
 
-    function Ping(adr: Address; mtype: MessageType; src: Machines; dst: Machines; corrupted:0..1) : Message;
-    var Message: Message;
+    function MakePing(timer: Timer; corrupted:0..1) : Message;
+    var Message: Message; -- ping packet
     begin
-      Message.adr := adr;
-      Message.mtype := mtype;
-      Message.src := src;
-      Message.dst := dst;
+      Message.adr := timer.msg.adr;
+      Message.mtype := PING;
+      Message.src := timer.msg.dst;
+      Message.dst := timer.msg.src;
       Message.corrupted := corrupted;
+      -- SanyaSriv: this is useful in case of ping propagation. This field should never change if the ping is getting propagated. 
+      -- this indicates the original requestor that started/initiated this ping. 
+      Message.original_req := timer.msg.src; 
+      Message.ping_type := timer.msg.mtype;
     return Message;
     end;
 
@@ -1180,7 +1187,36 @@
     endalias;
     return false;
     end;
-    
+
+-- SanyaSriv: Adding a procedure here to start the timer
+-- procedure StartTimer(msg: Message; m: Machines; src: Machines);
+  -- try to find an empty spot in the timer array and init it
+-- end;
+
+-- SanyaSriv: Adding a procedure here to increment the tick counter of everything
+procedure Tick();
+  var msg : Message;
+  begin
+    for i:OBJSET_cacheL1C1 do
+      for t:0..O_NET_MAX*3 do
+        if i_cacheL1C1[i].timerArray[t].timer_in_use = 1 then
+          -- if the timer is active then increment the tick
+          i_cacheL1C1[i].timerArray[t].time_elapsed := i_cacheL1C1[i].timerArray[t].time_elapsed + 1;
+          -- if the tick becomes 10, then initiate a timeout event
+          if i_cacheL1C1[i].timerArray[t].time_elapsed = 10 then -- TIMEOUT HAS HAPPENED + SEND A PING
+            msg := MakePing(i_cacheL1C1[i].timerArray[t], 0); -- not setting the corruption bit for now, but we can do it while testing
+            Send_ping(msg, msg.dst); -- SanyaSriv: can optionally add in here a check to make sure that the ping network is ready; add this if things fail during checks. 
+            -- reset the timer
+            i_cacheL1C1[i].timerArray[t].time_elapsed := 0;
+          endif;
+        endif;
+      endfor;
+    endfor;
+  end;
+
+-- SanyaSriv: Adding a procedure here to end the timer
+-- procedure EndTimer();
+-- end;
 
 --Backend/Murphi/MurphiModular/GenResetFunc
 
@@ -1203,60 +1239,57 @@
         cbe.State = cacheL1C1_I & network_ready() 
       ==>
         FSM_Access_cacheL1C1_I_store(adr, m);
-        -- TODO: Add decrementing tick
-        
+        Tick();
       endrule;
     
       rule "cacheL1C1_I_load"
         cbe.State = cacheL1C1_I & network_ready() 
       ==>
         FSM_Access_cacheL1C1_I_load(adr, m);
-        
+        Tick();
       endrule;
     
       rule "cacheL1C1_M_store"
         cbe.State = cacheL1C1_M 
       ==>
         FSM_Access_cacheL1C1_M_store(adr, m);
-        
+        Tick();
       endrule;
     
       rule "cacheL1C1_M_load"
         cbe.State = cacheL1C1_M 
       ==>
         FSM_Access_cacheL1C1_M_load(adr, m);
-        
+        Tick();
       endrule;
     
       rule "cacheL1C1_M_evict"
         cbe.State = cacheL1C1_M & network_ready() 
       ==>
         FSM_Access_cacheL1C1_M_evict(adr, m);
-        
+        Tick();
       endrule;
     
       rule "cacheL1C1_S_store"
         cbe.State = cacheL1C1_S & network_ready() 
       ==>
         FSM_Access_cacheL1C1_S_store(adr, m);
-        
+        Tick();
       endrule;
     
       rule "cacheL1C1_S_load"
         cbe.State = cacheL1C1_S 
       ==>
         FSM_Access_cacheL1C1_S_load(adr, m);
-        
+        Tick();
       endrule;
     
       rule "cacheL1C1_S_evict"
         cbe.State = cacheL1C1_S & network_ready() 
       ==>
         FSM_Access_cacheL1C1_S_evict(adr, m);
-        
+        Tick();
       endrule;
-    
-    
       endalias;
     endruleset;
     endruleset;
@@ -1273,10 +1306,14 @@
             if IsMember(dst, OBJSET_directoryL1C1) then
               if FSM_MSG_directoryL1C1(msg, dst, corruption) then
                   Pop_fwd(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
               endif;
             elsif IsMember(dst, OBJSET_cacheL1C1) then
               if FSM_MSG_cacheL1C1(msg, dst, corruption) then
                   Pop_fwd(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
               endif;
             else error "unknown machine";
             endif;
@@ -1297,10 +1334,14 @@
             if IsMember(dst, OBJSET_directoryL1C1) then
               if FSM_MSG_directoryL1C1(msg, dst, corruption) then
                   Pop_resp(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
               endif;
             elsif IsMember(dst, OBJSET_cacheL1C1) then
               if FSM_MSG_cacheL1C1(msg, dst, corruption) then
                   Pop_resp(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
               endif;
             else error "unknown machine";
             endif;
@@ -1321,10 +1362,14 @@
             if IsMember(dst, OBJSET_directoryL1C1) then
               if FSM_MSG_directoryL1C1(msg, dst, corruption) then
                   Pop_req(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
               endif;
             elsif IsMember(dst, OBJSET_cacheL1C1) then
               if FSM_MSG_cacheL1C1(msg, dst, corruption) then
                   Pop_req(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
               endif;
             else error "unknown machine";
             endif;
