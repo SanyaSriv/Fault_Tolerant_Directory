@@ -368,7 +368,7 @@
     -- TOOD (resolved): Add pop and push for pings
     -- pings will never be multicast, and will always be unicast
 
-    procedure Send_ping(msg:Message; src: Machines;);
+    procedure Send_ping(msg:Message;);
       Assert(cnt_ping[msg.dst] < O_NET_MAX) "Too many messages";
       ping[msg.dst][cnt_ping[msg.dst]] := msg;
       cnt_ping[msg.dst] := cnt_ping[msg.dst] + 1;
@@ -601,6 +601,21 @@
     return Message;
     end;
 
+    function MakePingResp(original_ping: Message; typem: MessageType; cl: ClValue; corrupted:0..1) : Message;
+    var Message: Message;
+    begin
+      Message.adr := original_ping.adr;
+      Message.mtype := typem;
+      Message.src := original_ping.dst;
+      Message.dst := original_ping.src;
+      Message.corrupted := corrupted;
+      Message.original_req := original_ping.src;
+      Message.ping_type := original_ping.ping_type;
+      Message.cl := cl; -- optional data attachment in case the message was an ACK_SUCCESS
+
+    return Message
+    end;
+
     function RequestL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines; corrupted:0..1) : Message;
     var Message: Message;
     begin
@@ -739,11 +754,10 @@
       if inmsg.corrupted = 1 then
         return true;
       endif;
-
+      
     switch cbe.State
       case cacheL1C1_I:
       switch inmsg.mtype
-        else return false;
       endswitch;
       -- TODO: Add case for pings
 
@@ -755,6 +769,31 @@
           Clear_perm(adr, m); Set_perm(load, adr, m);
           cbe.State := cacheL1C1_S;
           return true;
+
+        case ACK_PING_FAILURE:
+          switch inmsg.ping_type
+            case GetSL1C1:
+              -- just send this message again
+              msg := RequestL1C1(adr, GetSL1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+              Send_req(msg, m); -- we can reuse the original message timer for this event so no need to create a new one
+              cbe.State := cacheL1C1_I_load;
+              return true;
+            else return false;
+          endswitch;
+
+        case ACK_PING_SUCCESS:
+          switch inmsg.ping_type
+            case GetSL1C1: 
+              -- this means that the directory processed the message, but the response probably failed somewhere
+              -- but if this is the case, then the directory would have appended the response packet
+              -- so extract the response, and get to the correct state. 
+              cbe.cl := inmsg.cl;
+              Set_perm(load, adr, m);
+              Clear_perm(adr, m); Set_perm(load, adr, m);
+              cbe.State := cacheL1C1_S;
+              return true;
+            else return false;
+          endswitch;
         
         else return false;
       endswitch;
@@ -989,6 +1028,17 @@
           cbe.State := directoryL1C1_M;
           return true;
         
+        case PING:
+          -- adding case to specifically handle failures in GetSL1C1 messages when the directory was originally in state I
+          switch inmsg.ping_type
+            case GetSL1C1:
+              -- if the directory sees a ping for a GetSL1C1 in this stage, then it means it probably never reached the directory
+              -- otherwise it would have transitioned to some other state
+              -- So, this means that the original GetSL1C1 failed, so send a ping failed ACK.
+              msg := MakePingResp(inmsg, ACK_PING_FAILURE, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+              Send_ping(msg);
+          endswitch;
+
         case GetSL1C1:
           AddElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
           msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
@@ -1102,6 +1152,16 @@
       
       case directoryL1C1_S:
       switch inmsg.mtype
+        case PING:
+          -- adding case to specifically handle failures in GetSL1C1 messages when the directory was originally in state I
+          switch inmsg.ping_type
+            case GetSL1C1:
+              -- if the directory sees a ping for a GetSL1C1 in this stage, then it means the request reached, and the data got corrupted
+              -- so just send a success ACK and append the data to it 
+              msg := MakePingResp(inmsg, ACK_PING_SUCCESS, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+              Send_ping(msg);
+          endswitch;
+
         case GetML1C1:
           if (IsElement_cacheL1C1(cbe.cacheL1C1, inmsg.src)) then
             RemoveElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
@@ -1213,7 +1273,7 @@ procedure Tick();
           -- if the tick becomes 10, then initiate a timeout event
           if i_cacheL1C1[i].timerArray[t].time_elapsed = 10 then -- TIMEOUT HAS HAPPENED + SEND A PING
             msg := MakePing(i_cacheL1C1[i].timerArray[t], 0); -- not setting the corruption bit for now, but we can do it while testing
-            Send_ping(msg, msg.dst); -- SanyaSriv: can optionally add in here a check to make sure that the ping network is ready; add this if things fail during checks. 
+            Send_ping(msg); -- SanyaSriv: can optionally add in here a check to make sure that the ping network is ready; add this if things fail during checks. 
             -- reset the timer
             i_cacheL1C1[i].timerArray[t].time_elapsed := 0;
           endif;
