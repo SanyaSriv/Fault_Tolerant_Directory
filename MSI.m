@@ -92,7 +92,6 @@
         acc_type_obj: multiset[3] of PermissionType;
         PermMonitor: array[Machines] of array[Address] of acc_type_obj;
       
-    
     ----Backend/Murphi/MurphiModular/Types/GenMessage
       Message: record
         adr: Address;
@@ -109,7 +108,14 @@
         ping_type: MessageType; -- we can use some of the same message names in here
         -- For exmaple, the abstracted ping name will be PING, but the actual message type can be GetS or GetM underneath it
       end;
-      
+    
+    -- SanyaSriv: Mking a timer status in here:
+    Timer: record
+      msg: Message;
+      timer_in_use: 0..1; -- 0 means that this timer is not in use
+      time_elapsed: 0..10; -- After 10 cycles, we will trigger an event
+    end;
+
     ----Backend/Murphi/MurphiModular/Types/GenNetwork
       NET_Ordered: array[Machines] of array[0..O_NET_MAX-1] of Message;
       NET_Ordered_cnt: array[Machines] of 0..O_NET_MAX;
@@ -122,12 +128,11 @@
         cl: ClValue;
         acksReceivedL1C1: 0..NrCachesL1C1;
         acksExpectedL1C1: 0..NrCachesL1C1;
-        timerArray:-1..O_NET_MAX*2; -- if it is -1, the timer is not being used
-        -- TODO: we will have a timer array
       end;
       
       MACH_cacheL1C1: record
         cb: array[Address] of ENTRY_cacheL1C1;
+        timerArray: array[0..O_NET_MAX*3] of Timer;
       end;
       
       OBJ_cacheL1C1: array[OBJSET_cacheL1C1] of MACH_cacheL1C1;
@@ -143,6 +148,8 @@
       
       MACH_directoryL1C1: record
         cb: array[Address] of ENTRY_directoryL1C1;
+        -- SanySriv: Our assumption is that the directory does not keep track of any timers
+        -- So no additional exevnt needs to be added in here
       end;
       
       OBJ_directoryL1C1: array[OBJSET_directoryL1C1] of MACH_directoryL1C1;
@@ -186,8 +193,14 @@
           i_cacheL1C1[i].cb[a].cl := 0;
           i_cacheL1C1[i].cb[a].acksReceivedL1C1 := 0;
           i_cacheL1C1[i].cb[a].acksExpectedL1C1 := 0;
-    
         endfor;
+
+        -- SanyaSriv: adding code in here to reset the timerArray
+        for t:0..O_NET_MAX*3 do
+          i_cacheL1C1[i].timerArray[t].timer_in_use := 0;
+          i_cacheL1C1[i].timerArray[t].time_elapsed := 0;
+        endfor;
+        
       endfor;
     end;
     
