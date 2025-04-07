@@ -101,10 +101,13 @@
         dst: Machines;
         cl: ClValue;
         acksExpectedL1C1: 0..NrCachesL1C1;
+        corrupted: 0..1; -- If this is 1, then the message is corrupted, otherwise not. 
 
         -- If we need more stuff for the pings then we can create it here
         -- specific for pings, the others do not need it
         original_req: Machines;
+        ping_type: MessageType; -- we can use some of the same message names in here
+        -- For exmaple, the abstracted ping name will be PING, but the actual message type can be GetS or GetM underneath it
       end;
       
     ----Backend/Murphi/MurphiModular/Types/GenNetwork
@@ -155,7 +158,7 @@
       req: NET_Ordered;
       cnt_req: NET_Ordered_cnt;
       ping: NET_Ordered; 
-      cnt_ping: NET_Ordered_cnt; -- TOOD: Add a network for the ping
+      cnt_ping: NET_Ordered_cnt; -- TOOD (resolved): Add a network for the ping
     
      -- These are the virtual networks for faulty virtual networks
      -- message packets will fail if they choose this virtual network
@@ -346,7 +349,106 @@
       cnt_req[dst] := cnt_req[dst] - 1;
     end;
 
-    -- TOOD: Add pop and push for pings
+    -- TOOD (resolved): Add pop and push for pings
+    -- pings will never be multicast, and will always be unicast
+
+    procedure Send_ping(msg:Message; src: Machines;);
+      Assert(cnt_ping[msg.dst] < O_NET_MAX) "Too many messages";
+      ping[msg.dst][cnt_ping[msg.dst]] := msg;
+      cnt_ping[msg.dst] := cnt_ping[msg.dst] + 1;
+    end;
+    
+    procedure Pop_ping(dst:Machines; src: Machines;);
+    begin
+      Assert (cnt_ping[dst] > 0) "Trying to advance empty Q";
+      for i := 0 to cnt_ping[dst]-1 do
+        if i < cnt_ping[dst]-1 then
+          ping[dst][i] := ping[dst][i+1];
+        else
+          undefine ping[dst][i];
+        endif;
+      endfor;
+      cnt_ping[dst] := cnt_ping[dst] - 1;
+    end;
+
+   -- TODO (SanyaSriv): Adding procedures here to push stuff to a failed VC
+   -- everything inside this VC will fail
+   
+   procedure Send_fwd_failure(msg:Message; src: Machines;);
+      Assert(cnt_fwd_failure[msg.dst] < O_NET_MAX) "Too many messages";
+      fwd_failure[msg.dst][cnt_fwd_failure[msg.dst]] := msg;
+      cnt_fwd_failure[msg.dst] := cnt_fwd_failure[msg.dst] + 1;
+    end;
+    
+    procedure Pop_fwd_failure(dst:Machines; src: Machines;);
+    begin
+      Assert (cnt_fwd_failure[dst] > 0) "Trying to advance empty Q";
+      for i := 0 to cnt_fwd_failure[dst]-1 do
+        if i < cnt_fwd_failure[dst]-1 then
+          fwd_failure[dst][i] := fwd_failure[dst][i+1];
+        else
+          undefine fwd_failure[dst][i];
+        endif;
+      endfor;
+      cnt_fwd_failure[dst] := cnt_fwd_failure[dst] - 1;
+    end;
+    
+    procedure Send_resp_failure(msg:Message; src: Machines;);
+      Assert(cnt_resp_failure[msg.dst] < O_NET_MAX) "Too many messages";
+      resp_failure[msg.dst][cnt_resp_failure[msg.dst]] := msg;
+      cnt_resp_failure[msg.dst] := cnt_resp_failure[msg.dst] + 1;
+    end;
+    
+    procedure Pop_resp_failure(dst:Machines; src: Machines;);
+    begin
+      Assert (cnt_resp_failure[dst] > 0) "Trying to advance empty Q";
+      for i := 0 to cnt_resp_failure[dst]-1 do
+        if i < cnt_resp_failure[dst]-1 then
+          resp_failure[dst][i] := resp_failure[dst][i+1];
+        else
+          undefine resp_failure[dst][i];
+        endif;
+      endfor;
+      cnt_resp_failure[dst] := cnt_resp_failure[dst] - 1;
+    end;
+    
+    procedure Send_req_failure(msg:Message; src: Machines;);
+      Assert(cnt_req_failure[msg.dst] < O_NET_MAX) "Too many messages";
+      req_failure[msg.dst][cnt_req_failure[msg.dst]] := msg;
+      cnt_req_failure[msg.dst] := cnt_req_failure[msg.dst] + 1;
+    end;
+    
+    procedure Pop_req_failure(dst:Machines; src: Machines;);
+    begin
+      Assert (cnt_req_failure[dst] > 0) "Trying to advance empty Q";
+      for i := 0 to cnt_req_failure[dst]-1 do
+        if i < cnt_req_failure[dst]-1 then
+          req_failure[dst][i] := req_failure[dst][i+1];
+        else
+          undefine req_failure[dst][i];
+        endif;
+      endfor;
+      cnt_req_failure[dst] := cnt_req_failure[dst] - 1;
+    end;
+
+    procedure Send_ping_failure(msg:Message; src: Machines;);
+      Assert(cnt_ping_failure[msg.dst] < O_NET_MAX) "Too many messages";
+      ping_failure[msg.dst][cnt_ping_failure[msg.dst]] := msg;
+      cnt_ping_failure[msg.dst] := cnt_ping_failure[msg.dst] + 1;
+    end;
+    
+    procedure Pop_ping_filure(dst:Machines; src: Machines;);
+    begin
+      Assert (cnt_ping_failure[dst] > 0) "Trying to advance empty Q";
+      for i := 0 to cnt_ping_failure[dst]-1 do
+        if i < cnt_ping_failure[dst]-1 then
+          ping_failure[dst][i] := ping_failure[dst][i+1];
+        else
+          undefine ping_failure[dst][i];
+        endif;
+      endfor;
+      cnt_ping_failure[dst] := cnt_ping_failure[dst] - 1;
+    end;
     
     procedure Multicast_fwd_v_cacheL1C1(var msg: Message; dst_vect: v_cacheL1C1; src: Machines;);
     begin
@@ -396,6 +498,20 @@
     
           return true;
     end;
+
+    function ping_network_ready(): boolean;
+    begin
+          for dst:Machines do
+            for src: Machines do
+              if cnt_ping[dst] >= (O_NET_MAX-4) then
+                return false;
+              endif;
+            endfor;
+          endfor;
+    
+          return true;
+    end;
+
     function network_ready(): boolean;
     begin
             if !resp_network_ready() then
@@ -411,8 +527,11 @@
           if !req_network_ready() then
             return false;
           endif;
-    
-    
+
+          -- Adding init for ping
+          if !ping_network_ready() then
+            return false;
+          endif;
     
       return true;
     end;
@@ -434,34 +553,57 @@
       for dst:Machines do
           cnt_req[dst] := 0;
       endfor;
-    
+
+      -- adding the same init for ping
+      undefine ping;
+      for dst:Machines do
+          cnt_ping[dst] := 0;
+      endfor;
+
     end;
     
   
   ----Backend/Murphi/MurphiModular/Functions/GenMessageConstrFunc
     -- TOOD: construct a ping message in here
+    -- Sanya Methodology suggestion --> instead of building a while unsafe network, we can just send this message with a 1 bit value
+    -- that specifies whetehr it has failed or not
+    -- if the 1 bit value is set, then consider it failed
+    -- otherwise, we can continue to process it
 
-    function RequestL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines) : Message;
+    function Ping(adr: Address; mtype: MessageType; src: Machines; dst: Machines; corrupted:0..1) : Message;
     var Message: Message;
     begin
       Message.adr := adr;
       Message.mtype := mtype;
       Message.src := src;
       Message.dst := dst;
+      Message.corrupted := corrupted;
     return Message;
     end;
-    
-    function AckL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines) : Message;
+
+    function RequestL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines; corrupted:0..1) : Message;
     var Message: Message;
     begin
       Message.adr := adr;
       Message.mtype := mtype;
       Message.src := src;
       Message.dst := dst;
+      Message.corrupted := corrupted;
     return Message;
     end;
     
-    function RespL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines; cl: ClValue) : Message;
+    function AckL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines; corrupted:0..1) : Message;
+    var Message: Message;
+    begin
+      Message.adr := adr;
+      Message.mtype := mtype;
+      Message.src := src;
+      Message.dst := dst;
+      Message.corrupted := corrupted;
+    return Message;
+    end;
+    
+    function RespL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines; cl: ClValue; corrupted:0..1) : Message;
     var Message: Message;
     begin
       Message.adr := adr;
@@ -469,10 +611,11 @@
       Message.src := src;
       Message.dst := dst;
       Message.cl := cl;
+      Message.corrupted := corrupted;
     return Message;
     end;
     
-    function RespAckL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines; cl: ClValue; acksExpectedL1C1: 0..NrCachesL1C1) : Message;
+    function RespAckL1C1(adr: Address; mtype: MessageType; src: Machines; dst: Machines; cl: ClValue; acksExpectedL1C1: 0..NrCachesL1C1; corrupted:0..1) : Message;
     var Message: Message;
     begin
       Message.adr := adr;
@@ -481,6 +624,7 @@
       Message.dst := dst;
       Message.cl := cl;
       Message.acksExpectedL1C1 := acksExpectedL1C1;
+      Message.corrupted := corrupted;
     return Message;
     end;
     
@@ -493,7 +637,7 @@
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, GetSL1C1, m, directoryL1C1);
+      msg := RequestL1C1(adr, GetSL1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.State := cacheL1C1_I_load;
     endalias;
@@ -503,7 +647,7 @@
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1);
+      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.acksReceivedL1C1 := 0;
       cbe.State := cacheL1C1_I_store;
@@ -514,7 +658,7 @@
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RespL1C1(adr, PutML1C1, m, directoryL1C1, cbe.cl);
+      msg := RespL1C1(adr, PutML1C1, m, directoryL1C1, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.State := cacheL1C1_M_evict;
     endalias;
@@ -538,7 +682,7 @@
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, PutSL1C1, m, directoryL1C1);
+      msg := RequestL1C1(adr, PutSL1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.State := cacheL1C1_S_evict;
     endalias;
@@ -556,7 +700,7 @@
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1);
+      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.acksReceivedL1C1 := 0;
       cbe.State := cacheL1C1_S_store;
@@ -645,16 +789,16 @@
       case cacheL1C1_M:
       switch inmsg.mtype
         case Fwd_GetML1C1:
-          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_I;
           return true;
         
         case Fwd_GetSL1C1:
-          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
-          msg := RespL1C1(adr,WBL1C1,m,directoryL1C1,cbe.cl);
+          msg := RespL1C1(adr,WBL1C1,m,directoryL1C1,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           Clear_perm(adr, m); Set_perm(load, adr, m);
           cbe.State := cacheL1C1_S;
@@ -666,16 +810,16 @@
       case cacheL1C1_M_evict:
       switch inmsg.mtype
         case Fwd_GetML1C1:
-          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_M_evict_x_I;
           return true;
         
         case Fwd_GetSL1C1:
-          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
-          msg := RespL1C1(adr,WBL1C1,m,directoryL1C1,cbe.cl);
+          msg := RespL1C1(adr,WBL1C1,m,directoryL1C1,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_S_evict;
@@ -702,7 +846,7 @@
       case cacheL1C1_S:
       switch inmsg.mtype
         case InvL1C1:
-          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_I;
@@ -714,7 +858,7 @@
       case cacheL1C1_S_evict:
       switch inmsg.mtype
         case InvL1C1:
-          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_S_evict_x_I;
@@ -761,7 +905,7 @@
           return true;
         
         case InvL1C1:
-          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,Inv_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_I_store;
@@ -810,7 +954,7 @@
       case directoryL1C1_I:
       switch inmsg.mtype
         case GetML1C1:
-          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           cbe.ownerL1C1 := inmsg.src;
           Clear_perm(adr, m);
@@ -819,14 +963,14 @@
         
         case GetSL1C1:
           AddElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
-          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := directoryL1C1_S;
           return true;
         
         case PutML1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src);
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_fwd(msg, m);
           if !(cbe.ownerL1C1 = inmsg.src) then
             Clear_perm(adr, m);
@@ -841,7 +985,7 @@
           endif;
         
         case PutSL1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src);
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_fwd(msg, m);
           RemoveElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
           if (VectorCount_cacheL1C1(cbe.cacheL1C1) = 0) then
@@ -861,7 +1005,7 @@
       case directoryL1C1_M:
       switch inmsg.mtype
         case GetML1C1:
-          msg := RequestL1C1(adr,Fwd_GetML1C1,inmsg.src,cbe.ownerL1C1);
+          msg := RequestL1C1(adr,Fwd_GetML1C1,inmsg.src,cbe.ownerL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_fwd(msg, m);
           cbe.ownerL1C1 := inmsg.src;
           Clear_perm(adr, m);
@@ -869,7 +1013,7 @@
           return true;
         
         case GetSL1C1:
-          msg := RequestL1C1(adr,Fwd_GetSL1C1,inmsg.src,cbe.ownerL1C1);
+          msg := RequestL1C1(adr,Fwd_GetSL1C1,inmsg.src,cbe.ownerL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_fwd(msg, m);
           AddElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
           AddElement_cacheL1C1(cbe.cacheL1C1, cbe.ownerL1C1);
@@ -878,7 +1022,7 @@
           return true;
         
         case PutML1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src);
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_fwd(msg, m);
           if (cbe.ownerL1C1 = inmsg.src) then
             cbe.cl := inmsg.cl;
@@ -893,7 +1037,7 @@
           endif;
         
         case PutSL1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src);
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_fwd(msg, m);
           if !(cbe.ownerL1C1 = inmsg.src) then
             Clear_perm(adr, m);
@@ -934,9 +1078,9 @@
           if (IsElement_cacheL1C1(cbe.cacheL1C1, inmsg.src)) then
             RemoveElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
             if !(VectorCount_cacheL1C1(cbe.cacheL1C1) = 0) then
-              msg := RespAckL1C1(adr,GetM_Ack_ADL1C1,m,inmsg.src,cbe.cl,VectorCount_cacheL1C1(cbe.cacheL1C1));
+              msg := RespAckL1C1(adr,GetM_Ack_ADL1C1,m,inmsg.src,cbe.cl,VectorCount_cacheL1C1(cbe.cacheL1C1), 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
               Send_resp(msg, m);
-              msg := AckL1C1(adr,InvL1C1,inmsg.src,inmsg.src);
+              msg := AckL1C1(adr,InvL1C1,inmsg.src,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
               Multicast_fwd_v_cacheL1C1(msg, cbe.cacheL1C1, m);
               cbe.ownerL1C1 := inmsg.src;
               ClearVector_cacheL1C1(cbe.cacheL1C1);
@@ -945,7 +1089,7 @@
               return true;
             endif;
             if (VectorCount_cacheL1C1(cbe.cacheL1C1) = 0) then
-              msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl);
+              msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
               Send_resp(msg, m);
               cbe.ownerL1C1 := inmsg.src;
               ClearVector_cacheL1C1(cbe.cacheL1C1);
@@ -956,7 +1100,7 @@
           endif;
           if !(IsElement_cacheL1C1(cbe.cacheL1C1, inmsg.src)) then
             if (VectorCount_cacheL1C1(cbe.cacheL1C1) = 0) then
-              msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl);
+              msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
               Send_resp(msg, m);
               cbe.ownerL1C1 := inmsg.src;
               ClearVector_cacheL1C1(cbe.cacheL1C1);
@@ -965,9 +1109,9 @@
               return true;
             endif;
             if !(VectorCount_cacheL1C1(cbe.cacheL1C1) = 0) then
-              msg := RespAckL1C1(adr,GetM_Ack_ADL1C1,m,inmsg.src,cbe.cl,VectorCount_cacheL1C1(cbe.cacheL1C1));
+              msg := RespAckL1C1(adr,GetM_Ack_ADL1C1,m,inmsg.src,cbe.cl,VectorCount_cacheL1C1(cbe.cacheL1C1), 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
               Send_resp(msg, m);
-              msg := AckL1C1(adr,InvL1C1,inmsg.src,inmsg.src);
+              msg := AckL1C1(adr,InvL1C1,inmsg.src,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
               Multicast_fwd_v_cacheL1C1(msg, cbe.cacheL1C1, m);
               cbe.ownerL1C1 := inmsg.src;
               ClearVector_cacheL1C1(cbe.cacheL1C1);
@@ -979,14 +1123,14 @@
         
         case GetSL1C1:
           AddElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
-          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl);
+          msg := RespL1C1(adr,GetS_AckL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := directoryL1C1_S;
           return true;
         
         case PutML1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src);
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_fwd(msg, m);
           RemoveElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
           if (VectorCount_cacheL1C1(cbe.cacheL1C1) = 0) then
@@ -1001,7 +1145,7 @@
           endif;
         
         case PutSL1C1:
-          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src);
+          msg := AckL1C1(adr,Put_AckL1C1,m,inmsg.src, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_fwd(msg, m);
           RemoveElement_cacheL1C1(cbe.cacheL1C1, inmsg.src);
           if !(VectorCount_cacheL1C1(cbe.cacheL1C1) = 0) then
