@@ -735,6 +735,11 @@
     begin
       alias adr: inmsg.adr do
       alias cbe: i_cacheL1C1[m].cb[adr] do
+      -- SanyaSriv: drop the message if it is corrupted
+      if inmsg.corrupted = 1 then
+        return true;
+      endif;
+
     switch cbe.State
       case cacheL1C1_I:
       switch inmsg.mtype
@@ -970,6 +975,9 @@
     begin
       alias adr: inmsg.adr do
       alias cbe: i_directoryL1C1[m].cb[adr] do
+      if inmsg.corrupted = 1 then
+        return true;
+      endif;
     switch cbe.State
       case directoryL1C1_I:
       switch inmsg.mtype
