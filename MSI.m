@@ -601,6 +601,21 @@
     return Message;
     end;
 
+    function MakePingProp(adr: Address; mtype: MessageType; src: Machines; original_req: Machines; dst: Machines; corrupted:0..1) : Message;
+    var Message: Message; -- ping packet
+    begin
+      Message.adr := adr;
+      Message.mtype := PING_PROP;
+      Message.src := src;
+      Message.dst := dst;
+      Message.corrupted := corrupted;
+      -- SanyaSriv: this is useful in case of ping propagation. This field should never change if the ping is getting propagated. 
+      -- this indicates the original requestor that started/initiated this ping. 
+      Message.original_req := original_req; 
+      Message.ping_type := mtype;
+    return Message;
+    end;
+
     function MakePingResp(original_ping: Message; typem: MessageType; cl: ClValue; corrupted:0..1) : Message;
     var Message: Message;
     begin
@@ -676,6 +691,7 @@
           i_cacheL1C1[i].timerArray[t].msg_in_wait := msg_needed;
           return;
         endif;
+        -- SanyaSriv TODO: What happens when we dont have anymore available timers?
       endfor;
   end;
 
@@ -805,7 +821,7 @@
           EndTimer(inmsg, m); -- end the timer here 
           return true;
 
-        case ACK_PING_FAILURE:
+        case ACK_PING_FAILURE: -- I TO S CASE
           switch inmsg.ping_type
             case GetSL1C1:
               -- just send this message again
@@ -951,9 +967,14 @@
           cbe.State := cacheL1C1_I;
           return true;
         
-        case GetS_AckL1C1:
+        case GetS_AckL1C1: -- This is when we got ping response before data
           -- drop this, because if we transitioned to this state, then it probably happened because of the ping
            return true; -- this is synonymous to dropping the message and not processing it further
+        
+        case ACK_PING_SUCCESS: -- this is when we got data before ping response - timeout happened but no failure was there
+          -- drop this, because if we transitioned to this state, then it probably happened because of the ping
+          return true; -- this is synonymous to dropping the message and not processing it further
+
         else return false;
       endswitch;
       
@@ -1075,6 +1096,7 @@
               -- So, this means that the original GetSL1C1 failed, so send a ping failed ACK.
               msg := MakePingResp(inmsg, ACK_PING_FAILURE, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
               Send_ping(msg);
+            -- we can have a GetML1C1 case here
           endswitch;
 
         case GetSL1C1:
