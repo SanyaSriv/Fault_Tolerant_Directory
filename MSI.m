@@ -1096,7 +1096,28 @@
               -- So, this means that the original GetSL1C1 failed, so send a ping failed ACK.
               msg := MakePingResp(inmsg, ACK_PING_FAILURE, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
               Send_ping(msg);
-            -- we can have a GetML1C1 case here
+
+            --KG
+            case GetML1C1:
+              -- if the directory sees a ping for a GetML1C1 in this stage (I), then it means it probably never reached the directory
+              -- otherwise it would have transitioned from I --> M
+              -- means that the original GetML1C1 failed, so send a ping failed ACK
+              msg := MakePingResp(inmsg, ACK_PING_FAILURE, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+              Send_ping(msg);
+
+            --KG: since a Put-Ack was supposed to be sent (not data), should this be handled differently?
+            case PutML1C1:
+              -- if the directory sees a ping for a PutML1C1 in this stage (I), then it means the request reached, and the Put-Ack got corrupted
+              -- so just send a success ACK 
+              msg := MakePingResp(inmsg, ACK_PING_SUCCESS, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+              Send_ping(msg);
+
+            --KG: since a Put-Ack was supposed to be sent (not data), should this be handled differently?
+            case PutSL1C1:
+              -- if the directory sees a ping for a PutSL1C1 in this stage (I), then it means the request reached, and the data got corrupted
+              -- so just send a success ACK and append the data to it 
+              msg := MakePingResp(inmsg, ACK_PING_SUCCESS, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+              Send_ping(msg);
           endswitch;
 
         case GetSL1C1:
@@ -1149,6 +1170,25 @@
           Clear_perm(adr, m);
           cbe.State := directoryL1C1_M;
           return true;
+        
+        --KG
+        case PING:
+          -- adding case to specifically handle failures in GetML1C1 messages when the directory was originally in state I
+          switch inmsg.ping_type
+            -- KG: should we worry about handling GetM_Ack_ADL1C1 in this case?
+            case GetML1C1:
+              -- if the directory sees a ping for a GetML1C1 in this stage, then it means the request reached, and the data got corrupted
+              -- so just send a success ACK and append the data to it 
+              msg := MakePingResp(inmsg, ACK_PING_SUCCESS, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+              Send_ping(msg);
+
+            case PutML1C1:
+              -- if the directory sees a ping for a PutML1C1 in this stage (M), then it means it probably never reached the directory
+              -- otherwise it would have transitioned to some other state
+              -- So, this means that the original PutML1C1 failed, so send a ping failed ACK
+              msg := MakePingResp(inmsg, ACK_PING_FAILURE, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+              Send_ping(msg);
+          endswitch;
         
         case GetSL1C1:
           msg := RequestL1C1(adr,Fwd_GetSL1C1,inmsg.src,cbe.ownerL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
@@ -1220,7 +1260,16 @@
               -- so just send a success ACK and append the data to it 
               msg := MakePingResp(inmsg, ACK_PING_SUCCESS, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
               Send_ping(msg);
+          
+            --KG
+            case PutSL1C1:
+              -- if the directory sees a ping for a PutSL1C1 in this stage, then it means it probably never reached the directory
+              -- otherwise it would have transitioned to some other state (I)
+              -- So, this means that the original PutSL1C1 failed, so send a ping failed ACK.
+              msg := MakePingResp(inmsg, ACK_PING_FAILURE, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+              Send_ping(msg);
           endswitch;
+
 
         case GetML1C1:
           if (IsElement_cacheL1C1(cbe.cacheL1C1, inmsg.src)) then
