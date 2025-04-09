@@ -1177,14 +1177,14 @@
           switch inmsg.ping_type
             -- KG: should we worry about handling GetM_Ack_ADL1C1 in this case?
             case GetML1C1:
-              -- if the directory sees a ping for a GetML1C1 in this stage, then it means the request reached, and the data got corrupted
+              -- if the directory sees a ping for a GetML1C1 in this stage (M), then it means the request reached, and the data got corrupted
               -- so just send a success ACK and append the data to it 
               msg := MakePingResp(inmsg, ACK_PING_SUCCESS, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
               Send_ping(msg);
 
             case PutML1C1:
               -- if the directory sees a ping for a PutML1C1 in this stage (M), then it means it probably never reached the directory
-              -- otherwise it would have transitioned to some other state
+              -- otherwise it would have transitioned to some other state (I)
               -- So, this means that the original PutML1C1 failed, so send a ping failed ACK
               msg := MakePingResp(inmsg, ACK_PING_FAILURE, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
               Send_ping(msg);
@@ -1263,9 +1263,9 @@
           
             --KG
             case PutSL1C1:
-              -- if the directory sees a ping for a PutSL1C1 in this stage, then it means it probably never reached the directory
+              -- if the directory sees a ping for a PutSL1C1 in this stage (S), then it means it probably never reached the directory
               -- otherwise it would have transitioned to some other state (I)
-              -- So, this means that the original PutSL1C1 failed, so send a ping failed ACK.
+              -- means that the original PutSL1C1 failed, so send a ping failed ACK
               msg := MakePingResp(inmsg, ACK_PING_FAILURE, cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
               Send_ping(msg);
           endswitch;
