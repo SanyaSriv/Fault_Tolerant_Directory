@@ -591,15 +591,15 @@
     begin
       Message.adr := timer.msg.adr;
       Message.mtype := PING;
-      Message.src := timer.msg.dst;
-      Message.dst := timer.msg.src;
+      Message.src := timer.msg.src;
+      Message.dst := timer.msg.dst;
       Message.corrupted := corrupted;
       -- SanyaSriv: this is useful in case of ping propagation. This field should never change if the ping is getting propagated. 
       -- this indicates the original requestor that started/initiated this ping. 
       Message.original_req := timer.msg.src; 
       Message.ping_type := timer.msg.mtype;
     return Message;
-    end;
+    end;    
 
     function MakePingProp(adr: Address; mtype: MessageType; src: Machines; original_req: Machines; dst: Machines; corrupted:0..1) : Message;
     var Message: Message; -- ping packet
@@ -689,6 +689,7 @@
           i_cacheL1C1[i].timerArray[t].time_elapsed := 0;
           i_cacheL1C1[i].timerArray[t].msg := msg;
           i_cacheL1C1[i].timerArray[t].msg_in_wait := msg_needed;
+          i_cacheL1C1[i].timerArray[t].timer_in_use := 1;
           return;
         endif;
         -- SanyaSriv TODO: What happens when we dont have anymore available timers?
@@ -712,6 +713,30 @@
         endif;
       endfor;
   end;
+
+-- SanyaSriv: Adding a procedure here to increment the tick counter of everything
+procedure Tick();
+  var msg : Message;
+  begin
+    for i:OBJSET_cacheL1C1 do
+      for t:0..O_NET_MAX*3 do
+        if i_cacheL1C1[i].timerArray[t].timer_in_use = 1 then
+          -- if the timer is active then increment the tick
+          i_cacheL1C1[i].timerArray[t].time_elapsed := i_cacheL1C1[i].timerArray[t].time_elapsed + 1;
+          -- if the tick becomes 10, then initiate a timeout event
+          if i_cacheL1C1[i].timerArray[t].time_elapsed = 5 then -- TIMEOUT HAS HAPPENED + SEND A PING
+            msg := MakePing(i_cacheL1C1[i].timerArray[t], 0); -- not setting the corruption bit for now, but we can do it while testing
+            if ping_network_ready() then
+              Send_ping(msg); -- SanyaSriv: can optionally add in here a check to make sure that the ping network is ready; add this if things fail during checks. 
+              -- reset the timer
+              i_cacheL1C1[i].timerArray[t].time_elapsed := 0;
+            endif;
+          endif;
+        endif;
+      endfor;
+    endfor;
+  end;
+
 --Backend/Murphi/MurphiModular/GenStateMachines
 
   ----Backend/Murphi/MurphiModular/StateMachines/GenAccessStateMachines
@@ -1365,27 +1390,6 @@
     return false;
     end;
 
--- SanyaSriv: Adding a procedure here to increment the tick counter of everything
-procedure Tick();
-  var msg : Message;
-  begin
-    for i:OBJSET_cacheL1C1 do
-      for t:0..O_NET_MAX*3 do
-        if i_cacheL1C1[i].timerArray[t].timer_in_use = 1 then
-          -- if the timer is active then increment the tick
-          i_cacheL1C1[i].timerArray[t].time_elapsed := i_cacheL1C1[i].timerArray[t].time_elapsed + 1;
-          -- if the tick becomes 10, then initiate a timeout event
-          if i_cacheL1C1[i].timerArray[t].time_elapsed = 10 then -- TIMEOUT HAS HAPPENED + SEND A PING
-            msg := MakePing(i_cacheL1C1[i].timerArray[t], 0); -- not setting the corruption bit for now, but we can do it while testing
-            Send_ping(msg); -- SanyaSriv: can optionally add in here a check to make sure that the ping network is ready; add this if things fail during checks. 
-            -- reset the timer
-            i_cacheL1C1[i].timerArray[t].time_elapsed := 0;
-          endif;
-        endif;
-      endfor;
-    endfor;
-  end;
-
 --Backend/Murphi/MurphiModular/GenResetFunc
 
   procedure System_Reset();
@@ -1539,6 +1543,42 @@ procedure Tick();
                   -- SanyaSriv: call the tick counter because we have taken a global step in here
                   Tick();
               endif;
+            else error "unknown machine";
+            endif;
+    
+              endrule;
+            endalias;
+        endruleset;
+      endruleset;
+    endruleset;
+
+    ruleset dst:Machines do
+        ruleset src: Machines do
+          ruleset corruption:0..1 do
+            alias msg:ping[dst][0] do
+              rule "Receive ping"
+                cnt_ping[dst] > 0
+              ==>
+            if IsMember(dst, OBJSET_directoryL1C1) then
+              if FSM_MSG_directoryL1C1(msg, dst, corruption) then
+                  Pop_ping(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
+              else
+                Pop_ping(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
+              endif;
+            elsif IsMember(dst, OBJSET_cacheL1C1) then
+                if FSM_MSG_cacheL1C1(msg, dst, corruption) then
+                  Pop_ping(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
+                else
+                  Pop_ping(dst, src);
+                  -- SanyaSriv: call the tick counter because we have taken a global step in here
+                  Tick();
+                endif;
             else error "unknown machine";
             endif;
     
