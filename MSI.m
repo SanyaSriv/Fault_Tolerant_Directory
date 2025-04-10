@@ -1131,7 +1131,7 @@ procedure Tick();
       case directoryL1C1_I:
       switch inmsg.mtype
         case GetML1C1:
-          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 1); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_resp(msg, m);
           cbe.ownerL1C1 := inmsg.src;
           Clear_perm(adr, m);
