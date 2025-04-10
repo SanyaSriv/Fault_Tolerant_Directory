@@ -745,6 +745,7 @@ procedure Tick();
     var msg_expected : Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
+      -- add 1 here to corrupt GetSL1C1 package
       msg := RequestL1C1(adr, GetSL1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       -- start the timer in here for this message
@@ -756,11 +757,15 @@ procedure Tick();
     
     procedure FSM_Access_cacheL1C1_I_store(adr:Address; m:OBJSET_cacheL1C1);
     var msg: Message;
+    var msg_expected : Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
       msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.acksReceivedL1C1 := 0;
+      -- start the timer in here for this message
+      msg_expected := RespL1C1(adr, GetM_Ack_DL1C1, directoryL1C1, m, 0, 0);
+      StartTimer(msg, msg_expected, m);
       cbe.State := cacheL1C1_I_store;
     endalias;
     end;
@@ -904,6 +909,21 @@ procedure Tick();
           cbe.State := cacheL1C1_I_store;
           return true;
         
+        --KG: if the ping was successful, then transition the state to cacheL1C1_M
+        case ACK_PING_SUCCESS:
+          cbe.cl := inmsg.cl;
+          Set_perm(load, adr, m);
+          Clear_perm(adr, m); Set_perm(load, adr, m);
+          cbe.State := cacheL1C1_M;
+          return true;
+
+        --KG: if the ping failed, then resend the GetM request to the directory
+        case ACK_PING_FAILURE:
+          msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          Send_req(msg, m);
+          cbe.State := cacheL1C1_I_store;
+          return true
+
         else return false;
       endswitch;
       
@@ -933,6 +953,12 @@ procedure Tick();
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_I;
+          return true;
+        
+        case PING:
+          return true;
+        
+        case GetM_Ack_DL1C1:
           return true;
         
         case Fwd_GetSL1C1:
