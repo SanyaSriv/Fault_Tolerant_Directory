@@ -745,6 +745,7 @@ procedure Tick();
     var msg_expected : Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
+      -- add 1 here to corrupt GetSL1C1 package
       msg := RequestL1C1(adr, GetSL1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       -- start the timer in here for this message
@@ -758,7 +759,7 @@ procedure Tick();
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 1); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.acksReceivedL1C1 := 0;
       cbe.State := cacheL1C1_I_store;
@@ -793,7 +794,7 @@ procedure Tick();
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, PutSL1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+      msg := RequestL1C1(adr, PutSL1C1, m, directoryL1C1, 1); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.State := cacheL1C1_S_evict;
     endalias;
@@ -811,7 +812,7 @@ procedure Tick();
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 1); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.acksReceivedL1C1 := 0;
       cbe.State := cacheL1C1_S_store;
@@ -904,6 +905,17 @@ procedure Tick();
           cbe.State := cacheL1C1_I_store;
           return true;
         
+        --KG: if the ping was successful, then transition the state to cacheL1C1_M
+        case ACK_PING_SUCCESS:
+          cbe.State := cacheL1C1_M;
+          return true;
+
+        --KG: if the ping failed, then resend the GetM request to the directory
+        case ACK_PING_FAILURE:
+          msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+          Send_req(msg, m);
+          return true
+
         else return false;
       endswitch;
       
@@ -933,6 +945,12 @@ procedure Tick();
           Send_resp(msg, m);
           Clear_perm(adr, m);
           cbe.State := cacheL1C1_I;
+          return true;
+        
+        case PING:
+          return true;
+        
+        case GetM_Ack_DL1C1:
           return true;
         
         case Fwd_GetSL1C1:
