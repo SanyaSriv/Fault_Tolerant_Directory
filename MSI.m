@@ -794,7 +794,7 @@ procedure Tick();
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, PutSL1C1, m, directoryL1C1, 1); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+      msg := RequestL1C1(adr, PutSL1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.State := cacheL1C1_S_evict;
     endalias;
@@ -812,7 +812,7 @@ procedure Tick();
     var msg: Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 1); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.acksReceivedL1C1 := 0;
       cbe.State := cacheL1C1_S_store;
