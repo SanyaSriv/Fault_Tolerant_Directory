@@ -757,11 +757,15 @@ procedure Tick();
     
     procedure FSM_Access_cacheL1C1_I_store(adr:Address; m:OBJSET_cacheL1C1);
     var msg: Message;
+    var msg_expected : Message;
     begin
     alias cbe: i_cacheL1C1[m].cb[adr] do
-      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 1); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
+      msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
       Send_req(msg, m);
       cbe.acksReceivedL1C1 := 0;
+      -- start the timer in here for this message
+      msg_expected := RespL1C1(adr, GetM_Ack_DL1C1, directoryL1C1, m, 0, 0);
+      StartTimer(msg, msg_expected, m);
       cbe.State := cacheL1C1_I_store;
     endalias;
     end;
@@ -907,6 +911,9 @@ procedure Tick();
         
         --KG: if the ping was successful, then transition the state to cacheL1C1_M
         case ACK_PING_SUCCESS:
+          cbe.cl := inmsg.cl;
+          Set_perm(load, adr, m);
+          Clear_perm(adr, m); Set_perm(load, adr, m);
           cbe.State := cacheL1C1_M;
           return true;
 
@@ -914,6 +921,7 @@ procedure Tick();
         case ACK_PING_FAILURE:
           msg := RequestL1C1(adr, GetML1C1, m, directoryL1C1, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later
           Send_req(msg, m);
+          cbe.State := cacheL1C1_I_store;
           return true
 
         else return false;
@@ -1123,7 +1131,7 @@ procedure Tick();
       case directoryL1C1_I:
       switch inmsg.mtype
         case GetML1C1:
-          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 0); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
+          msg := RespL1C1(adr,GetM_Ack_DL1C1,m,inmsg.src,cbe.cl, 1); -- SanyaSriv: just making all messages uncorrupted for now, can be changed later to use the variable corruption
           Send_resp(msg, m);
           cbe.ownerL1C1 := inmsg.src;
           Clear_perm(adr, m);
